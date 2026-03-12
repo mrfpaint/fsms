@@ -459,7 +459,7 @@ label.fl{font-size:12px;font-weight:600;color:var(--ink2);font-family:'Syne',san
       </button>
 
       <div class="login-note">Only employees with a valid <strong>@mrfpaint.com</strong> Microsoft account can access this system. Contact your IT admin if you have trouble signing in.</div>
-      <div class="login-note" style="margin-top:8px;color:#aaa;font-size:11px;">&#9432; A Microsoft login popup will open when you click the button. If nothing happens, allow popups for this site in your browser settings.</div>
+      <div class="login-note" style="margin-top:8px;color:#aaa;font-size:11px;">Sign in with your MRF Microsoft 365 account</div>
     </div>
   </div>
 </div>
@@ -853,19 +853,38 @@ async function refreshTokens() {
   if (t) { _spToken = t; _mailToken = t; }
 }
 
-/* ── Sign In: full-page redirect to Microsoft ──────────── */
-function signIn() {
+/* ── PKCE helpers ───────────────────────────────────────── */
+function generateRandom(len) {
+  var arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode.apply(null, arr))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function sha256base64url(plain) {
+  var enc  = new TextEncoder().encode(plain);
+  var hash = await crypto.subtle.digest('SHA-256', enc);
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(hash)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+/* ── Sign In: full-page redirect to Microsoft (with PKCE) ── */
+async function signIn() {
   if (!IS_CONFIGURED) { toast('Azure AD not configured. Use Demo Mode.', 'error'); return; }
-  var state = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  var state        = generateRandom(32);
+  var codeVerifier = generateRandom(64);
+  var codeChallenge = await sha256base64url(codeVerifier);
   sessionStorage.setItem('fsms_st', state);
+  sessionStorage.setItem('fsms_cv', codeVerifier);
   var params = new URLSearchParams({
-    client_id:     CONFIG.clientId,
-    response_type: 'code',
-    redirect_uri:  REDIRECT_URI,
-    scope:         ALL_SCOPES,
-    state:         state,
-    response_mode: 'query',
-    prompt:        'select_account',
+    client_id:             CONFIG.clientId,
+    response_type:         'code',
+    redirect_uri:          REDIRECT_URI,
+    scope:                 ALL_SCOPES,
+    state:                 state,
+    response_mode:         'query',
+    prompt:                'select_account',
+    code_challenge:        codeChallenge,
+    code_challenge_method: 'S256',
   });
   window.location.href = AUTH_BASE + '?' + params.toString();
 }
@@ -910,12 +929,14 @@ async function initAuth() {
     }
     showLoading('Signing you in...');
     try {
+      var codeVerifier = sessionStorage.getItem('fsms_cv') || '';
       var r = await fetch(TOKEN_URL, { method:'POST', body: new URLSearchParams({
-        client_id:    CONFIG.clientId,
-        grant_type:   'authorization_code',
-        code:         code,
-        redirect_uri: REDIRECT_URI,
-        scope:        ALL_SCOPES,
+        client_id:     CONFIG.clientId,
+        grant_type:    'authorization_code',
+        code:          code,
+        redirect_uri:  REDIRECT_URI,
+        scope:         ALL_SCOPES,
+        code_verifier: codeVerifier,
       })});
       var data = await r.json();
       if (!data.access_token) throw new Error(data.error_description || data.error || 'No token received');
