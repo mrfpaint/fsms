@@ -3431,28 +3431,28 @@ function updateAdminStats(requests) {
   const avgTime = approved > 0 ? (requests.filter(r => r.Status === 'Approved').reduce((sum, r) => sum + r.ApprovalTimeHours, 0) / approved).toFixed(1) : 0;
   const compliance = approved > 0 ? (onTime / approved * 100).toFixed(1) : 0;
 
-  const html = \`
+  const html = `
     <div class="stat c-teal">
       <div class="stat-label">Total Requests</div>
-      <div class="stat-val">\${total}</div>
+      <div class="stat-val">${total}</div>
       <div class="stat-sub">From all regions</div>
     </div>
     <div class="stat c-amber">
       <div class="stat-label">Pending Approvals</div>
-      <div class="stat-val">\${pending}</div>
+      <div class="stat-val">${pending}</div>
       <div class="stat-sub">Awaiting action</div>
     </div>
     <div class="stat c-teal">
       <div class="stat-label">TAT Compliance</div>
-      <div class="stat-val">\${compliance}%</div>
+      <div class="stat-val">${compliance}%</div>
       <div class="stat-sub">Approved within 24hrs</div>
     </div>
     <div class="stat c-blue">
       <div class="stat-label">Avg Approval Time</div>
-      <div class="stat-val">\${avgTime}h</div>
+      <div class="stat-val">${avgTime}h</div>
       <div class="stat-sub">Hours from submission</div>
     </div>
-  \`;
+  `;
 
   const grid = document.getElementById('adminStatsGrid');
   if(grid) grid.innerHTML = html;
@@ -3465,16 +3465,16 @@ function renderAdminRequestsTable(requests) {
   const html = requests.map(req => {
     const tatStatus = getTATStatusAdmin(req);
     const tatClass = tatStatus === 'On-Time' ? 'teal' : tatStatus === 'Late' || tatStatus === 'Overdue' ? 'red' : 'amber';
-    return \`<tr style="border-bottom:1px solid #e8e8e8">
-      <td style="padding:12px"><strong>\${req.RequestID}</strong></td>
-      <td style="padding:12px">\${req.Region}</td>
-      <td style="padding:12px">\${req.SubmitterName}</td>
-      <td style="padding:12px">\${req.SubmittedDate}</td>
-      <td style="padding:12px"><span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:\${req.Status === 'Pending' ? 'var(--amber-dim);color:#b45309' : 'var(--teal-dim);color:var(--teal-dark)'}">\${req.Status}</span></td>
-      <td style="padding:12px"><span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:\${tatClass === 'teal' ? 'var(--teal-dim);color:var(--teal-dark)' : 'var(--red-dim);color:var(--red)'}">\${tatStatus}</span></td>
-      <td style="padding:12px;font-weight:600;\${req.ApprovalTimeHours > 24 ? 'color:var(--red)' : 'color:var(--ink)'}">\${req.ApprovalTimeHours}</td>
-      <td style="padding:12px">\${req.ApprovedBy}</td>
-    </tr>\`;
+    return `<tr style="border-bottom:1px solid #e8e8e8">
+      <td style="padding:12px"><strong>${req.RequestID}</strong></td>
+      <td style="padding:12px">${req.Region}</td>
+      <td style="padding:12px">${req.SubmitterName}</td>
+      <td style="padding:12px">${req.SubmittedDate}</td>
+      <td style="padding:12px"><span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${req.Status === 'Pending' ? 'var(--amber-dim);color:#b45309' : 'var(--teal-dim);color:var(--teal-dark)'}">${req.Status}</span></td>
+      <td style="padding:12px"><span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${tatClass === 'teal' ? 'var(--teal-dim);color:var(--teal-dark)' : 'var(--red-dim);color:var(--red)'}">${tatStatus}</span></td>
+      <td style="padding:12px;font-weight:600;${req.ApprovalTimeHours > 24 ? 'color:var(--red)' : 'color:var(--ink)'}">${req.ApprovalTimeHours}</td>
+      <td style="padding:12px">${req.ApprovedBy}</td>
+    </tr>`;
   }).join('');
 
   tbody.innerHTML = html || '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ink3)">No requests found</td></tr>';
@@ -3493,21 +3493,21 @@ function updateTATMetrics(allRequests) {
     const compliance = total > 0 ? (onTime / total * 100).toFixed(1) : 0;
     const avgTime = total > 0 ? (regional.reduce((sum, r) => sum + r.ApprovalTimeHours, 0) / total).toFixed(1) : 0;
 
-    return \`<tr style="border-bottom:1px solid #e8e8e8">
-      <td style="padding:12px"><strong>\${region}</strong></td>
-      <td style="padding:12px">\${total}</td>
-      <td style="padding:12px">\${onTime}</td>
-      <td style="padding:12px">\${late}</td>
+    return `<tr style="border-bottom:1px solid #e8e8e8">
+      <td style="padding:12px"><strong>${region}</strong></td>
+      <td style="padding:12px">${total}</td>
+      <td style="padding:12px">${onTime}</td>
+      <td style="padding:12px">${late}</td>
       <td style="padding:12px">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:80px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
-            <div style="height:100%;background:var(--teal);width:\${compliance}%"></div>
+            <div style="height:100%;background:var(--teal);width:${compliance}%"></div>
           </div>
-          <span style="font-weight:600;color:var(--teal)">\${compliance}%</span>
+          <span style="font-weight:600;color:var(--teal)">${compliance}%</span>
         </div>
       </td>
-      <td style="padding:12px">\${avgTime}</td>
-    </tr>\`;
+      <td style="padding:12px">${avgTime}</td>
+    </tr>`;
   }).join('');
 
   tbody.innerHTML = html;
@@ -3521,7 +3521,7 @@ function showOverdueAlerts(requests) {
   if(overdue.length > 0 && alertBox) {
     alertBox.style.display = 'block';
     const regions = [...new Set(overdue.map(r => r.Region))];
-    alertMsg.innerHTML = \`<strong>\${overdue.length} request(s) from \${regions.join(', ')} region(s) pending for >12 hours.</strong> <a href="#" style="color:#92400e;text-decoration:underline">View Pending</a>\`;
+    alertMsg.innerHTML = `<strong>${overdue.length} request(s) from ${regions.join(', ')} region(s) pending for >12 hours.</strong> <a href="#" style="color:#92400e;text-decoration:underline">View Pending</a>`;
   } else if(alertBox) {
     alertBox.style.display = 'none';
   }
