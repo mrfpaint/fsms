@@ -723,6 +723,59 @@ label.fl{font-size:12px;font-weight:600;color:var(--ink2);font-family:'Syne',san
         </div>
       </div>
 
+      <!-- ALL REQUESTS (IT ADMIN) DASHBOARD -->
+      <div class="page" id="page-admin-requests">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div style="font-size:28px">📊</div>
+          <div style="flex:1;margin-left:16px">
+            <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">All Requests Dashboard</div>
+            <div style="font-size:12px;color:var(--ink3)">Cross-regional view of all FSR requests with TAT tracking</div>
+          </div>
+        </div>
+
+        <!-- ALERT BOX -->
+        <div id="alertBox" style="display:none;background:var(--amber-dim);border:1px solid var(--amber);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--ink)">
+          <div id="alertMsg"></div>
+        </div>
+
+        <!-- FILTERS -->
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <select class="fsel" id="filterStatus" onchange="loadAdminRequests()">
+            <option value="">All Status</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+          </select>
+          <select class="fsel" id="filterRegion" onchange="loadAdminRequests()">
+            <option value="">All Regions</option>
+            <option value="North">North</option>
+            <option value="South">South</option>
+            <option value="East">East</option>
+            <option value="West">West</option>
+          </select>
+          <select class="fsel" id="filterTAT" onchange="loadAdminRequests()">
+            <option value="">All TAT Status</option>
+            <option value="On-Time">On-Time</option>
+            <option value="Late">Late</option>
+            <option value="Overdue">Overdue</option>
+          </select>
+        </div>
+
+        <!-- STATS GRID -->
+        <div class="stats-grid" id="adminStatsGrid"></div>
+
+        <!-- REQUESTS TABLE -->
+        <div class="card">
+          <div class="card-head"><div class="card-title">Requests by Region</div></div>
+          <div class="tw"><table><thead><tr><th>Ref #</th><th>Region</th><th>Submitter</th><th>Date</th><th>Status</th><th>TAT Status</th><th>Hours</th><th>Approved By</th></tr></thead><tbody id="adminRequestsBody"></tbody></table></div>
+        </div>
+
+        <!-- TAT METRICS TABLE -->
+        <div class="card">
+          <div class="card-head"><div class="card-title">TAT Compliance by Region</div></div>
+          <div class="tw"><table><thead><tr><th>Region</th><th>Total</th><th>On-Time</th><th>Late</th><th>Compliance</th><th>Avg Hours</th></tr></thead><tbody id="tatMetricsBody"></tbody></table></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
