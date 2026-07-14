@@ -964,7 +964,7 @@ async function loadUserAndLaunch(authUser) {
     if (email === 'joshy.francis@mrfpaint.com') {
       role = 'admin';
     }
-    currentUser = { name, email, initials, role, secondaryRole: '', primaryRole, dept: userRecord?.dept || '', spId: userRecord?.spId, region: 'IT_ADMIN', itAdmin: true };
+    currentUser = { name, email, initials, role, secondaryRole: '', primaryRole, dept: userRecord?.dept || '', spId: userRecord?.spId, region: userRecord?.region || '', itAdmin: true };
     // Update last login in the database
     if (userRecord) {
       userRecord.lastLogin = new Date().toISOString();
@@ -1468,10 +1468,25 @@ async function bulkImportUsers() {
 }
 
 async function sendNotification(toEmail, subject, bodyHtml, ccEmails=[]) {
-  // Email notifications are OFF in this version (they needed Microsoft 365).
-  // They can be added back later with a Supabase Edge Function + an email
-  // service such as Resend. Approvals still work inside the app itself.
-  console.log(`[Email disabled] Would send to ${toEmail}: ${subject}`);
+  // Sends email through the "send-email" Edge Function in Supabase,
+  // which delivers it via Brevo. See EMAIL_SETUP_GUIDE.md.
+  if (!isLiveMode || !sb) {
+    console.log(`[Demo] Email to ${toEmail}: ${subject}`);
+    return;
+  }
+  if (!toEmail) { console.warn('[Email] No recipient — skipped:', subject); return; }
+  try {
+    const { data, error } = await sb.functions.invoke('send-email', {
+      body: { to: toEmail, subject: subject, html: bodyHtml, cc: ccEmails || [] },
+    });
+    if (error) throw new Error(error.message || 'Edge Function error');
+    if (data && data.error) throw new Error(data.error);
+    console.log(`[Email] ✅ Sent to ${toEmail}: ${subject}`);
+  } catch(e) {
+    // Email failure should never block the request itself
+    console.error('[Email] Send failed:', e);
+    toast('Note: email notification could not be sent (the request itself was saved).', 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1597,6 +1612,22 @@ async function checkAndSendReminders() {
 // Returns true if role behaves like sales
 function isSalesRole(r) {
   return ['sales','st','bdo'].includes(r);
+}
+
+// HIERARCHY: true if a request belongs to the current manager's team.
+// A request is "my team" when the submitter reports to me (ReportsToASM /
+// ReportsToRSM), when it's my own request, or — if the submitter has no
+// manager assigned — when they are in my region (fallback so requests are
+// never invisible to everyone).
+function isMyTeam(x, mgrRole) {
+  const me = (currentUser?.email||'').toLowerCase();
+  if ((x.submittedByEmail||'').toLowerCase() === me) return true;
+  const users = getUsers();
+  const sub = users.find(u=>(u.email||'').toLowerCase()===(x.submittedByEmail||'').toLowerCase());
+  const mgr = ((mgrRole==='asm' ? sub?.reportsToASM : sub?.reportsToRSM)||'').toLowerCase();
+  if (mgr) return mgr === me;
+  const myRegion = (currentUser?.region||'').toLowerCase();
+  return !!myRegion && (sub?.region||'').toLowerCase() === myRegion;
 }
 
 function launchApp() {
@@ -2123,9 +2154,11 @@ function renderMyRequests(){
     const submitter = getUsers().find(u=>u.email.toLowerCase()===x.submittedByEmail?.toLowerCase());
     return submitter?.region===currentUser.region;
   });
+  // ASM/RSM only see their own team's requests (admin sees all)
+  else if(['asm','rsm'].includes(currentUser?.role)) d=d.filter(x=>isMyTeam(x, currentUser.role));
   if(s) d=d.filter(x=>(x.refNo+x.custName+x.siteName).toLowerCase().includes(s));
   if(sf) d=d.filter(x=>x.status===sf);
-  document.getElementById('myReqTitle').textContent=isSalesRole(currentUser?.role)?`My Requests (${d.length})`:currentUser?.role==='ea'?`Region Requests (${d.length})`:`All Requests (${d.length})`;
+  document.getElementById('myReqTitle').textContent=isSalesRole(currentUser?.role)?`My Requests (${d.length})`:currentUser?.role==='ea'?`Region Requests (${d.length})`:['asm','rsm'].includes(currentUser?.role)?`Team Requests (${d.length})`:`All Requests (${d.length})`;
   document.getElementById('myReqBody').innerHTML=!d.length
     ?`<tr><td colspan="9"><div class="es"><div class="es-icon">📭</div>No requests found</div></td></tr>`
     :d.map(x=>`<tr>
@@ -2154,11 +2187,16 @@ function renderApprovals(){
   // Determine effective approval role: asm or rsm (check both primary and secondary)
   const isAsm = primary==='asm' || secondary==='asm';
   const isRsm = primary==='rsm' || secondary==='rsm';
+  const isAdmin = primary==='admin' || secondary==='admin';
   const role = isRsm ? 'rsm' : (isAsm ? 'asm' : primary);
   // RSM sees both Pending ASM (override) and ASM Approved (normal)
   let d=load().requests.filter(x=>role==='asm'
     ? x.status==='Pending ASM'
     : (x.status==='ASM Approved' || x.status==='Pending ASM'));
+  // HIERARCHY: ASM/RSM only see requests from their own team (admin sees all).
+  if (!isAdmin && (role==='asm' || role==='rsm')) {
+    d=d.filter(x=>isMyTeam(x, role));
+  }
   d=[...d].sort((a,b)=>new Date(a.submittedAt)-new Date(b.submittedAt));
   if(s)d=d.filter(x=>(x.refNo+x.custName).toLowerCase().includes(s));
   document.getElementById('appTitle').textContent=role==='asm'?`Pending ASM Approval (${d.length})`:`Pending RSM Approval (${d.length})`;
@@ -2715,16 +2753,14 @@ function getExportableRequests() {
   // Filter by role
   if (isSalesRole(role)) {
     data = data.filter(x => x.submittedByEmail === currentUser.email);
-  } else if (role === 'ea' || role === 'asm') {
+  } else if (role === 'ea') {
     data = data.filter(x => {
       const submitter = getUsers().find(u => u.email.toLowerCase() === x.submittedByEmail?.toLowerCase());
       return submitter?.region === currentUser.region;
     });
-  } else if (role === 'rsm') {
-    data = data.filter(x => {
-      const submitter = getUsers().find(u => u.email.toLowerCase() === x.submittedByEmail?.toLowerCase());
-      return submitter?.region === currentUser.region;
-    });
+  } else if (role === 'asm' || role === 'rsm') {
+    // ASM/RSM export only their own team's requests
+    data = data.filter(x => isMyTeam(x, role));
   }
   // admin sees all — no filter
   return data;
