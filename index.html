@@ -1051,6 +1051,59 @@ async function fetchAllRows(table) {
   return all;
 }
 
+// ── Product catalog & sales offices (from SCM Tracker data) ──
+// Loaded from Supabase if the tables exist (run supabase_catalog.sql).
+// If not loaded, the form gracefully falls back to free-text entry.
+let _products = [];
+let _offices  = [];
+
+async function loadCatalog() {
+  try {
+    const [prodRows, offRows] = await Promise.all([
+      fetchAllRows('products'),
+      fetchAllRows('sales_offices'),
+    ]);
+    _products = prodRows.filter(p=>p.active!==false);
+    _offices  = offRows.filter(o=>o.active!==false);
+    console.log(`[DB] Catalog: ${_products.length} products, ${_offices.length} offices`);
+  } catch(e) {
+    console.warn('[DB] Catalog not available (run supabase_catalog.sql to enable dropdowns):', e.message);
+    _products = []; _offices = [];
+  }
+}
+function catalogCategories(){ return [...new Set(_products.map(p=>p.category))].sort(); }
+function catalogGroups(cat){ return [...new Set(_products.filter(p=>p.category===cat).map(p=>p.product_group))].sort(); }
+function catalogSkus(cat,grp){ return _products.filter(p=>p.category===cat && p.product_group===grp); }
+
+// Turns the Sales Office number box into a grouped dropdown when the
+// office list is loaded
+function populateOfficeSelect(){
+  if (!_offices.length) return; // keep the plain number box
+  const old = document.getElementById('f_so');
+  if (!old) return;
+  if (old.tagName === 'SELECT') { fillOfficeOptions(old); return; }
+  const sel = document.createElement('select');
+  sel.id = 'f_so';
+  fillOfficeOptions(sel);
+  old.parentNode.replaceChild(sel, old);
+  const hint = sel.closest('.fg')?.querySelector('.fl span:last-child');
+  if (hint && hint.textContent.indexOf('digits')>=0) hint.textContent = '';
+}
+function fillOfficeOptions(sel){
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select office…</option>';
+  [...new Set(_offices.map(o=>o.region))].forEach(r=>{
+    const og = document.createElement('optgroup'); og.label = r;
+    _offices.filter(o=>o.region===r).forEach(o=>{
+      const op = document.createElement('option');
+      op.value = o.code; op.textContent = `${o.code} — ${o.name}`;
+      og.appendChild(op);
+    });
+    sel.appendChild(og);
+  });
+  if (cur) sel.value = cur;
+}
+
 // ── File attachments (Supabase Storage) ─────────────────────
 // Uploads files and saves clickable links on the request
 async function uploadAttachments(itemId, files) {
@@ -1262,6 +1315,7 @@ async function spLoadAll(retryCount=0) {
     _requests = reqRows.map(dbToRequest);
     _users    = userRows.map(dbToUser);
     console.log(`[DB] Loaded ${_requests.length} requests, ${_users.length} users`);
+    await loadCatalog();
   } catch(e) {
     console.error('[DB] Load failed:', e);
     if (retryCount < 2) {
@@ -1634,6 +1688,7 @@ function launchApp() {
   document.getElementById('loadingScreen').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
+  populateOfficeSelect();
 
   // Update sidebar user info
   document.getElementById('sbAvatar').textContent = currentUser.initials;
@@ -2027,20 +2082,51 @@ function addProdRow(){
   const rows = document.getElementById('prodRows');
   if (rows && rows.children.length >= 6) { toast('Maximum 6 products allowed','error'); return; }
   const id=++prc, w=rows, d=document.createElement('div');
-  d.className='pr'; d.id=`pr_${id}`;
+  d.id=`prw_${id}`;
+  const hasCatalog = _products.length > 0;
+  const catOpts = catalogCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   d.innerHTML=`
-    <div class="fg"><label class="fl">Material Description${id===1?'<span class="req"> *</span>':''}</label><input type="text" id="pn_${id}" placeholder="Material description"/></div>
-    <div class="fg"><label class="fl">Material Code</label><input type="text" id="pmc_${id}" placeholder="Material code"/></div>
-    <div class="fg"><label class="fl">Quantity</label><input type="number" id="pq_${id}" placeholder="Qty" min="1"/></div>
-    <div class="fg"><label class="fl">Pack Size (ml/L/KG)</label><input type="text" id="pp_${id}" placeholder="e.g. 5kg"/></div>
-    <div class="fg"><label class="fl" style="opacity:0">x</label><button class="btn btn-rej btn-sm btn-icon" onclick="rmProdRow(${id})">✕</button></div>`;
+    ${hasCatalog?`
+    <div class="pr" id="prd_${id}">
+      <div class="fg"><label class="fl">Category${id===1?'<span class="req"> *</span>':''}</label><select id="pcat_${id}" onchange="prodCatChange(${id})"><option value="">Select…</option>${catOpts}</select></div>
+      <div class="fg"><label class="fl">Product Group</label><select id="pgrp_${id}" onchange="prodGrpChange(${id})"><option value="">Select…</option></select></div>
+      <div class="fg"><label class="fl">SKU (code — pack)</label><select id="psku_${id}"><option value="">Select…</option></select></div>
+      <div class="fg"><label class="fl">Quantity</label><input type="number" id="pqd_${id}" placeholder="Qty" min="1"/></div>
+      <div class="fg"><label class="fl" style="opacity:0">x</label><button class="btn btn-rej btn-sm btn-icon" onclick="rmProdRow(${id})">✕</button></div>
+    </div>`:''}
+    <div class="pr" id="prm_${id}"${hasCatalog?' style="display:none"':''}>
+      <div class="fg"><label class="fl">Material Description${id===1&&!hasCatalog?'<span class="req"> *</span>':''}</label><input type="text" id="pn_${id}" placeholder="Material description"/></div>
+      <div class="fg"><label class="fl">Material Code</label><input type="text" id="pmc_${id}" placeholder="Material code"/></div>
+      <div class="fg"><label class="fl">Quantity</label><input type="number" id="pq_${id}" placeholder="Qty" min="1"/></div>
+      <div class="fg"><label class="fl">Pack Size (ml/L/KG)</label><input type="text" id="pp_${id}" placeholder="e.g. 5kg"/></div>
+      <div class="fg"><label class="fl" style="opacity:0">x</label><button class="btn btn-rej btn-sm btn-icon" onclick="rmProdRow(${id})">✕</button></div>
+    </div>
+    ${hasCatalog?`<div style="text-align:right;margin:-4px 0 10px"><a href="#" id="prt_${id}" onclick="toggleProdMode(${id});return false" style="font-size:11.5px;color:var(--teal);font-weight:600">✏️ Product not in the list? Type manually</a></div>`:''}`;
   w.appendChild(d);
   // Hide add button if 4 products reached
   const addBtn = document.getElementById('addProdBtn');
   if (addBtn) addBtn.style.display = w.children.length >= 4 ? 'none' : '';
 }
+function toggleProdMode(id){
+  const dd=document.getElementById(`prd_${id}`), mm=document.getElementById(`prm_${id}`), t=document.getElementById(`prt_${id}`);
+  if(!dd||!mm) return;
+  const manualNow = mm.style.display !== 'none';
+  mm.style.display = manualNow ? 'none' : '';
+  dd.style.display = manualNow ? '' : 'none';
+  if(t) t.textContent = manualNow ? '✏️ Product not in the list? Type manually' : '📋 Back to product list';
+}
+function prodCatChange(id){
+  const cat=document.getElementById(`pcat_${id}`).value, g=document.getElementById(`pgrp_${id}`);
+  g.innerHTML='<option value="">Select…</option>'+catalogGroups(cat).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  document.getElementById(`psku_${id}`).innerHTML='<option value="">Select…</option>';
+}
+function prodGrpChange(id){
+  const cat=document.getElementById(`pcat_${id}`).value, grp=document.getElementById(`pgrp_${id}`).value;
+  document.getElementById(`psku_${id}`).innerHTML='<option value="">Select…</option>'+
+    catalogSkus(cat,grp).map(p=>`<option value="${p.id}">${esc(p.code)} — ${esc(p.description)} (${esc(p.pack)})</option>`).join('');
+}
 function rmProdRow(id){
-  const e=document.getElementById(`pr_${id}`);
+  const e=document.getElementById(`prw_${id}`)||document.getElementById(`pr_${id}`);
   if(e&&document.getElementById('prodRows').children.length>1){
     e.remove();
     const addBtn=document.getElementById('addProdBtn');
@@ -2048,15 +2134,30 @@ function rmProdRow(id){
   }
 }
 function getProds(){
-  const ns=document.getElementById('prodRows').querySelectorAll('[id^="pn_"]'),prods=[];
-  ns.forEach(inp=>{
-    const n=inp.id.replace('pn_',''),nm=inp.value.trim();
-    if(nm) prods.push({
-      name:nm,
-      code:document.getElementById(`pmc_${n}`)?.value||'',
-      qty:document.getElementById(`pq_${n}`)?.value||'',
-      pk:document.getElementById(`pp_${n}`)?.value||''
-    });
+  const prods=[];
+  document.getElementById('prodRows').querySelectorAll(':scope > div').forEach(w=>{
+    const id=(w.id||'').replace('prw_','').replace('pr_','');
+    if(!id) return;
+    const dd=document.getElementById(`prd_${id}`);
+    const manualVisible = !dd || dd.style.display === 'none';
+    if (manualVisible) {
+      const nm=(document.getElementById(`pn_${id}`)?.value||'').trim();
+      if(nm) prods.push({
+        name:nm,
+        code:document.getElementById(`pmc_${id}`)?.value||'',
+        qty:document.getElementById(`pq_${id}`)?.value||'',
+        pk:document.getElementById(`pp_${id}`)?.value||''
+      });
+    } else {
+      const sel=document.getElementById(`psku_${id}`);
+      const p=_products.find(x=>String(x.id)===String(sel?.value||''));
+      if(p) prods.push({
+        name:p.description,
+        code:p.code,
+        qty:document.getElementById(`pqd_${id}`)?.value||'',
+        pk:p.pack
+      });
+    }
   });
   return prods;
 }
