@@ -1881,6 +1881,7 @@ function renderForm() {
   document.getElementById('reqFormBody').innerHTML = buildFormHTML();
   renderFormStep();
   addProdRow();
+  populateOfficeSelect(); // form is rebuilt each open — re-apply office dropdown
 }
 
 function buildFormHTML() {
